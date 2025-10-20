@@ -1,0 +1,6 @@
+SELECT message FROM audit_log WHERE binary_tag=0x3031303230333034;
+SELECT message FROM audit_log WHERE binary_tag = (0x3031303230333034);
+SELECT message FROM audit_log WHERE binary_tag =
+0x3031303230333034;
+SELECT message FROM audit_log WHERE binary_tag = 0x3031303230333034;
+SELECT message FROM audit_log WHERE binary_tag=0x3031303230333034;

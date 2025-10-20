@@ -1,0 +1,1 @@
+SELECT message FROM audit_log WHERE binary_tag = _binary '';

@@ -1,0 +1,2 @@
+SELECT message FROM audit_log WHERE binary_tag = _binary '01020304';
+SELECT message FROM audit_log WHERE binary_tag = binary '01020304';

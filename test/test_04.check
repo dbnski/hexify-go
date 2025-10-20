@@ -1,0 +1,1 @@
+SELECT message FROM audit_log WHERE uuid = 0x11f08fbff34954689cc80b52fe01000f;

@@ -10,5 +10,10 @@
 !/Makefile
 !/README.md
 
+!test/*.txt
+!test/*.sh
+!test/*.in
+!test/*.check
+
 # ...even if they are in subdirectories
 !*/

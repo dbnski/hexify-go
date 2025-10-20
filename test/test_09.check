@@ -1,0 +1,2 @@
+# SELECT * FROM configs WHERE config_key = 'max_connections';
+# SELECT * FROM configs WHERE config_key = _binary '01020304';
