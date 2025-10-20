@@ -8,6 +8,7 @@
 !go.sum
 !go.mod
 !/Makefile
+!/README.md
 
 # ...even if they are in subdirectories
 !*/
