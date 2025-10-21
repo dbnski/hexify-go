@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"flag"
 	"io"
@@ -23,10 +24,10 @@ const (
 var keyword = []byte("binary")
 
 type Task struct {
-	fd            *os.File
+	r             io.Reader
+	w             io.Writer
 	state         State
 	buffer        []byte
-	encoded       []byte
 	quoteChar     byte
 	inComment     bool
 	inBinary      bool
@@ -37,13 +38,13 @@ type Task struct {
 	matched       int
 }
 
-func NewTask(fd *os.File) *Task {
+func NewTask(r io.Reader, w io.Writer) *Task {
 	return &Task{
-		fd:      fd,
+		r:       r,
+		w:       w,
 		state:   TEXT,
 		newLine: true,
 		buffer:  make([]byte, 0, BYTE_STRING_SIZE),
-		encoded: make([]byte, 0, 8),
 	}
 }
 
@@ -52,7 +53,7 @@ func (t *Task) printAsHexString() error {
 		return nil
 	}
 
-	fmt.Print("0x")
+	fmt.Fprint(t.w, "0x")
 
 	for i := 0; i < len(t.buffer); i++ {
 		c := t.buffer[i]
@@ -87,7 +88,7 @@ func (t *Task) printAsHexString() error {
 			}
 		}
 
-		fmt.Printf("%02x", c)
+		fmt.Fprintf(t.w, "%02x", c)
 	}
 
 	return nil
@@ -95,12 +96,12 @@ func (t *Task) printAsHexString() error {
 
 func (t *Task) printEatenChars() {
 	for ; t.underscores > 0; t.underscores-- {
-		os.Stdout.Write([]byte{'_'})
+		t.w.Write([]byte{'_'})
 	}
-	os.Stdout.Write(keyword[:t.matched])
+	t.w.Write(keyword[:t.matched])
 	t.matched = 0
 	for ; t.whitespaces > 0; t.whitespaces-- {
-		os.Stdout.Write([]byte{' '})
+		t.w.Write([]byte{' '})
 	}
 }
 
@@ -109,7 +110,7 @@ func (t *Task) Run() error {
 	buf     := make([]byte, READ_BUFFER_SIZE)
 
 	for {
-		n, err := t.fd.Read(buf)
+		n, err := t.r.Read(buf)
 		if err != nil && err != io.EOF {
 			return err
 		}
@@ -129,7 +130,7 @@ func (t *Task) Run() error {
 
 				// copy and move on quickly
 				if t.inComment {
-					os.Stdout.Write([]byte{c})
+					t.w.Write([]byte{c})
 					break
 				}
 
@@ -181,7 +182,7 @@ func (t *Task) Run() error {
 					break
 				}
 
-				os.Stdout.Write([]byte{c})
+				t.w.Write([]byte{c})
 
 			case RAW:
 				// search for closing quote char
@@ -196,7 +197,7 @@ func (t *Task) Run() error {
 					t.backslashes = 0
 				}
 
-				os.Stdout.Write([]byte{c})
+				t.w.Write([]byte{c})
 
 			case QUOTED_STRING:
 				// non-printable ascii implies byte string
@@ -221,15 +222,15 @@ func (t *Task) Run() error {
 									os.Exit(1)
 								}
 							} else {
-								os.Stdout.Write([]byte{t.quoteChar})
-								os.Stdout.Write(t.buffer)
-								os.Stdout.Write([]byte{t.quoteChar})
+								t.w.Write([]byte{t.quoteChar})
+								t.w.Write(t.buffer)
+								t.w.Write([]byte{t.quoteChar})
 							}
 						} else {
 							if t.inBinary {
 								t.printEatenChars()
 							}
-							os.Stdout.Write([]byte{t.quoteChar, t.quoteChar})
+							t.w.Write([]byte{t.quoteChar, t.quoteChar})
 						}
 
 						// reset parser
@@ -251,9 +252,9 @@ func (t *Task) Run() error {
 				if len(t.buffer) == BYTE_STRING_SIZE {
 					// dump everything without conversion
 					t.printEatenChars()
-					os.Stdout.Write([]byte{t.quoteChar})
-					os.Stdout.Write(t.buffer)
-					os.Stdout.Write([]byte{c}) // not in the buffer yet
+					t.w.Write([]byte{t.quoteChar})
+					t.w.Write(t.buffer)
+					t.w.Write([]byte{c}) // not in the buffer yet
 
 					// continue in raw mode until the end of string
 					t.state       = RAW
@@ -292,7 +293,10 @@ func main() {
 	}
 	flag.Parse()
 
-	task := NewTask(os.Stdin)
+	w := bufio.NewWriter(os.Stdout)
+	defer w.Flush()
+
+	task := NewTask(os.Stdin, w)
 	if err := task.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error occurred: %w\n", err)
 		os.Exit(1)
