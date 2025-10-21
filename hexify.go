@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"fmt"
 	"flag"
 	"io"
@@ -88,16 +87,7 @@ func (t *Task) printAsHexString() error {
 			}
 		}
 
-		t.encoded = append(t.encoded, c)
-		if i % 8 == 7 {
-			fmt.Print(hex.EncodeToString(t.encoded))
-			t.encoded = t.encoded[:0]
-		}
-	}
-
-	if len(t.encoded) > 0 {
-		fmt.Print(hex.EncodeToString(t.encoded))
-		t.encoded = t.encoded[:0]
+		fmt.Printf("%02x", c)
 	}
 
 	return nil
