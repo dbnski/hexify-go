@@ -109,8 +109,8 @@ func (t *Task) Run() error {
 	offset  := 0
 	bufLen	:= t.limit * 2
 
-	if bufLen < 4096 {
-		bufLen = 4096
+	if bufLen < 65536 {
+		bufLen = 65536
 	}
 
 	buf     := make([]byte, bufLen)
