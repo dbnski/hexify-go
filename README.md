@@ -1,4 +1,4 @@
-# unhex
+# hexify
 
 A minimal utility that transforms byte strings often found in MySQL log files into hexadecimal literal representation.
 
