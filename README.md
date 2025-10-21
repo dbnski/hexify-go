@@ -24,5 +24,5 @@ make
 $ echo "SELECT * FROM table WHERE id = BINARY '1234567890';" | ./hexify -l 256
 SELECT * FROM table WHERE id = 0x31323334353637383930;
 $ echo "SELECT * FROM table WHERE id = BINARY '1234567890';" | ./hexify -l 8
-SELECT * FROM table WHERE id = _binary '1234567890';
+SELECT * FROM table WHERE id = BINARY '1234567890';
 ```
