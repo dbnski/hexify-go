@@ -22,7 +22,7 @@ var keyword = []byte("binary")
 
 type Task struct {
 	r             io.Reader
-	w             io.Writer
+	w             *bufio.Writer
 	limit         int
 	state         State
 	buffer        []byte
@@ -39,7 +39,7 @@ type Task struct {
 func NewTask(r io.Reader, w io.Writer, limit int) *Task {
 	return &Task{
 		r:       r,
-		w:       w,
+		w:       bufio.NewWriter(w),
 		limit:   limit,
 		state:   TEXT,
 		newLine: true,
@@ -94,16 +94,18 @@ func (t *Task) printAsHexString() error {
 
 func (t *Task) printEatenChars() {
 	for ; t.underscores > 0; t.underscores-- {
-		t.w.Write([]byte{'_'})
+		t.w.WriteByte('_')
 	}
 	t.w.Write(keyword[:t.matched])
 	t.matched = 0
 	for ; t.whitespaces > 0; t.whitespaces-- {
-		t.w.Write([]byte{' '})
+		t.w.WriteByte(' ')
 	}
 }
 
 func (t *Task) Run() error {
+	defer t.w.Flush()
+
 	offset  := 0
 	bufLen	:= t.limit * 2
 
@@ -135,7 +137,7 @@ func (t *Task) Run() error {
 
 				// copy and move on quickly
 				if t.inComment {
-					t.w.Write([]byte{c})
+					t.w.WriteByte(c)
 					break
 				}
 
@@ -187,7 +189,7 @@ func (t *Task) Run() error {
 					break
 				}
 
-				t.w.Write([]byte{c})
+				t.w.WriteByte(c)
 
 			case RAW:
 				// search for closing quote char
@@ -202,7 +204,7 @@ func (t *Task) Run() error {
 					t.backslashes = 0
 				}
 
-				t.w.Write([]byte{c})
+				t.w.WriteByte(c)
 
 			case QUOTED_STRING:
 				// non-printable ascii implies byte string
@@ -227,15 +229,16 @@ func (t *Task) Run() error {
 									os.Exit(1)
 								}
 							} else {
-								t.w.Write([]byte{t.quoteChar})
+								t.w.WriteByte(t.quoteChar)
 								t.w.Write(t.buffer)
-								t.w.Write([]byte{t.quoteChar})
+								t.w.WriteByte(t.quoteChar)
 							}
 						} else {
 							if t.inBinary {
 								t.printEatenChars()
 							}
-							t.w.Write([]byte{t.quoteChar, t.quoteChar})
+							t.w.WriteByte(t.quoteChar)
+							t.w.WriteByte(t.quoteChar)
 						}
 
 						// reset parser
@@ -257,9 +260,9 @@ func (t *Task) Run() error {
 				if len(t.buffer) == t.limit {
 					// dump everything without conversion
 					t.printEatenChars()
-					t.w.Write([]byte{t.quoteChar})
+					t.w.WriteByte(t.quoteChar)
 					t.w.Write(t.buffer)
-					t.w.Write([]byte{c}) // not in the buffer yet
+					t.w.WriteByte(c) // not in the buffer yet
 
 					// continue in raw mode until the end of string
 					t.state       = RAW
@@ -300,10 +303,7 @@ func main() {
 	}
 	flag.Parse()
 
-	w := bufio.NewWriter(os.Stdout)
-	defer w.Flush()
-
-	task := NewTask(os.Stdin, w, *limit)
+	task := NewTask(os.Stdin, os.Stdout, *limit)
 	if err := task.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error occurred: %w\n", err)
 		os.Exit(1)
