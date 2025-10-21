@@ -12,9 +12,6 @@ import (
 type State int
 
 const (
-	READ_BUFFER_SIZE = 4096
-	BYTE_STRING_SIZE = 256
-
 	TEXT 		  State = iota
 	QUOTED_STRING
 	BINARY
@@ -26,6 +23,7 @@ var keyword = []byte("binary")
 type Task struct {
 	r             io.Reader
 	w             io.Writer
+	limit         int
 	state         State
 	buffer        []byte
 	quoteChar     byte
@@ -38,13 +36,13 @@ type Task struct {
 	matched       int
 }
 
-func NewTask(r io.Reader, w io.Writer) *Task {
+func NewTask(r io.Reader, w io.Writer, limit int) *Task {
 	return &Task{
 		r:       r,
 		w:       w,
+		limit:   limit,
 		state:   TEXT,
 		newLine: true,
-		buffer:  make([]byte, 0, BYTE_STRING_SIZE),
 	}
 }
 
@@ -107,7 +105,14 @@ func (t *Task) printEatenChars() {
 
 func (t *Task) Run() error {
 	offset  := 0
-	buf     := make([]byte, READ_BUFFER_SIZE)
+	bufLen	:= t.limit * 2
+
+	if bufLen < 4096 {
+		bufLen = 4096
+	}
+
+	buf     := make([]byte, bufLen)
+	t.buffer = make([]byte, 0, t.limit)
 
 	for {
 		n, err := t.r.Read(buf)
@@ -249,7 +254,7 @@ func (t *Task) Run() error {
 				}
 
 				// if the byte string is too long
-				if len(t.buffer) == BYTE_STRING_SIZE {
+				if len(t.buffer) == t.limit {
 					// dump everything without conversion
 					t.printEatenChars()
 					t.w.Write([]byte{t.quoteChar})
@@ -286,17 +291,19 @@ func (t *Task) Run() error {
 }
 
 func main() {
+	limit := flag.Int("l", 256, "skip byte strings longer than this limit")
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: hexify [-h]\n")
-		fmt.Fprintf(os.Stderr, "Convert byte strings to hexadecimal literals\n")
-		os.Exit(0)
+		fmt.Fprintf(os.Stderr, "Usage: hexify [-h] [-l <size>]\n")
+		fmt.Fprintf(os.Stderr, "Convert byte strings to hexadecimal literals\n\n")
+		flag.PrintDefaults()
+		os.Exit(1)
 	}
 	flag.Parse()
 
 	w := bufio.NewWriter(os.Stdout)
 	defer w.Flush()
 
-	task := NewTask(os.Stdin, w)
+	task := NewTask(os.Stdin, w, *limit)
 	if err := task.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error occurred: %w\n", err)
 		os.Exit(1)
