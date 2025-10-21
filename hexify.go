@@ -27,6 +27,7 @@ type Task struct {
 	fd            *os.File
 	state         State
 	buffer        []byte
+	encoded       []byte
 	quoteChar     byte
 	inComment     bool
 	inBinary      bool
@@ -42,24 +43,23 @@ func NewTask(fd *os.File) *Task {
 		fd:      fd,
 		state:   TEXT,
 		newLine: true,
+		buffer:  make([]byte, 0, BYTE_STRING_SIZE),
+		encoded: make([]byte, 0, 8),
 	}
 }
 
-func (t *Task) printAsHexString() {
+func (t *Task) printAsHexString() error {
 	if len(t.buffer) == 0 {
-		return
+		return nil
 	}
 
 	fmt.Print("0x")
-
-	buf := make([]byte, 0, 8)
 
 	for i := 0; i < len(t.buffer); i++ {
 		c := t.buffer[i]
 		if c == '\\' {
 			if i == len(t.buffer) - 1 {
-				fmt.Fprintln(os.Stderr, "incomplete escape sequence")
-				os.Exit(1)
+				return fmt.Errorf("incomplete escape sequence")
 			}
 			switch t.buffer[i+1] {
 			case '\'', '"', '\\':
@@ -84,21 +84,23 @@ func (t *Task) printAsHexString() {
 				c = 0x1a
 				i++
 			default:
-				fmt.Fprintf(os.Stderr, "bad sequence: %02x %02x\n", c, t.buffer[i+1])
-				os.Exit(1)
+				return fmt.Errorf("bad sequence: %02x %02x\n", c, t.buffer[i+1])
 			}
 		}
 
-		buf = append(buf, c)
+		t.encoded = append(t.encoded, c)
 		if i % 8 == 7 {
-			fmt.Print(hex.EncodeToString(buf))
-			buf = buf[:0]
+			fmt.Print(hex.EncodeToString(t.encoded))
+			t.encoded = t.encoded[:0]
 		}
 	}
 
-	if len(buf) > 0 {
-		fmt.Print(hex.EncodeToString(buf))
+	if len(t.encoded) > 0 {
+		fmt.Print(hex.EncodeToString(t.encoded))
+		t.encoded = t.encoded[:0]
 	}
+
+	return nil
 }
 
 func (t *Task) printEatenChars() {
@@ -113,8 +115,8 @@ func (t *Task) printEatenChars() {
 }
 
 func (t *Task) Run() error {
+	offset  := 0
 	buf     := make([]byte, READ_BUFFER_SIZE)
-	context := make([]byte, 0, BYTE_STRING_SIZE)
 
 	for {
 		n, err := t.fd.Read(buf)
@@ -207,10 +209,6 @@ func (t *Task) Run() error {
 				os.Stdout.Write([]byte{c})
 
 			case QUOTED_STRING:
-				// store pointer to the beginning of the string
-				if t.buffer == nil {
-					t.buffer = buf[i:i]
-				}
 				// non-printable ascii implies byte string
 				if c < 0x20 || c == 0x7f {
 					t.state = BINARY;
@@ -218,10 +216,6 @@ func (t *Task) Run() error {
 				fallthrough
 
 			case BINARY:
-				// store pointer to the beginning of the string
-				if t.buffer == nil {
-					t.buffer = buf[i:i]
-				}
 				// search for the closing quote char
 				if c == '\\' {
 					t.backslashes++
@@ -231,7 +225,11 @@ func (t *Task) Run() error {
 						if len(t.buffer) > 0 {
 							// convert to hex string or leave as is
 							if t.state == BINARY {
-								t.printAsHexString()
+								err := t.printAsHexString()
+								if err != nil {
+									fmt.Fprintf(os.Stderr, "Error at position %d+%d: %s\n", offset, i, err)
+									os.Exit(1)
+								}
 							} else {
 								os.Stdout.Write([]byte{t.quoteChar})
 								os.Stdout.Write(t.buffer)
@@ -246,14 +244,13 @@ func (t *Task) Run() error {
 
 						// reset parser
 						t.state       = TEXT
-						t.buffer      = nil
+						t.buffer      = t.buffer[:0]
 						t.quoteChar   = 0
 						t.inBinary    = false
 						t.backslashes = 0
 						t.underscores = 0
 						t.whitespaces = 0
 						t.matched  = 0
-						context = context[:0]
 
 						break
 					}
@@ -270,30 +267,16 @@ func (t *Task) Run() error {
 
 					// continue in raw mode until the end of string
 					t.state       = RAW
-					t.buffer      = nil
+					t.buffer      = t.buffer[:0]
 					t.inBinary    = false
 					t.underscores = 0
 					t.whitespaces = 0
 					t.matched  = 0
-					context = context[:0]
 
 					break
 				}
 
-				// if context buffer is in use, append the current char to it
-				if len(context) > 0 {
-					context = append(context, c)
-				}
-				t.buffer = t.buffer[:len(t.buffer)+1] // add current char to the conversion buffer
-			}
-
-			if i == READ_BUFFER_SIZE - 1 {
-				// if we reached the end of the read buffer while in the middle of a string
-				if t.state == QUOTED_STRING || t.state == BINARY {
-					// use context buffer to carry the string over
-					context = append(context, t.buffer[:]...)
-					t.buffer = context
-				}
+				t.buffer = append(t.buffer, c)
 			}
 
 			switch {
@@ -304,6 +287,8 @@ func (t *Task) Run() error {
 				t.newLine = false
 			}
 		}
+
+		offset += n
 	}
 
 	return nil
