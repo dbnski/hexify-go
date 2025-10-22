@@ -9,7 +9,8 @@ A minimal utility that transforms byte strings often found in MySQL log files in
 
 ## Notes
 
-- Aborts conversion for byte strings longer than the declared limit leaving the original version (defaults to 256 bytes)
+- Aborts conversion for byte strings longer than the declared limit
+- Lnog byte strings can be retained or replaced with placeholder text
 - Full-line comments are preserved unchanged regardless their content
 
 ## Build
@@ -24,5 +25,7 @@ make
 $ echo "SELECT * FROM table WHERE id = BINARY '1234567890';" | ./hexify -l 256
 SELECT * FROM table WHERE id = 0x31323334353637383930;
 $ echo "SELECT * FROM table WHERE id = BINARY '1234567890';" | ./hexify -l 8
-SELECT * FROM table WHERE id = BINARY '1234567890';
+SELECT * FROM table WHERE id = binary '<byte string: 10 bytes>';
+$ echo "SELECT * FROM table WHERE id = BINARY '1234567890';" | ./hexify -l 8 -k
+SELECT * FROM table WHERE id = binary '1234567890';
 ```
