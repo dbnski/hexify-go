@@ -6,6 +6,7 @@ import (
 	"flag"
 	"io"
 	"os"
+	"strconv"
 	"unicode"
 )
 
@@ -24,6 +25,7 @@ type Task struct {
 	r             io.Reader
 	w             *bufio.Writer
 	limit         int
+	keep          bool
 	state         State
 	buffer        []byte
 	quoteChar     byte
@@ -36,11 +38,12 @@ type Task struct {
 	matched       int
 }
 
-func NewTask(r io.Reader, w io.Writer, limit int) *Task {
+func NewTask(r io.Reader, w io.Writer, limit int, keep bool) *Task {
 	return &Task{
 		r:       r,
 		w:       bufio.NewWriter(w),
 		limit:   limit,
+		keep:    keep,
 		state:   TEXT,
 		newLine: true,
 	}
@@ -106,8 +109,13 @@ func (t *Task) printEatenChars() {
 func (t *Task) Run() error {
 	defer t.w.Flush()
 
-	offset  := 0
-	bufLen	:= t.limit * 2
+	var (
+		pos  int
+		keep bool
+	)
+
+	offset := 0
+	bufLen := t.limit * 2
 
 	if bufLen < 65536 {
 		bufLen = 65536
@@ -150,6 +158,7 @@ func (t *Task) Run() error {
 					} else if c == '\'' || c == '"' {
 						t.state = BINARY
 						t.quoteChar = c
+						pos = offset + i + 1
 						break
 					}
 					// string argument (quote char) not found
@@ -186,6 +195,7 @@ func (t *Task) Run() error {
 				if c == '\'' || c == '"' {
 					t.state = QUOTED_STRING
 					t.quoteChar = c
+					pos = offset + i + 1
 					break
 				}
 
@@ -198,13 +208,21 @@ func (t *Task) Run() error {
 				} else {
 					// non-escaped quote char ends the current string
 					if c == t.quoteChar && t.backslashes % 2 == 0 {
+						if !keep {
+							t.w.WriteString("<byte string: ")
+							t.w.WriteString(strconv.Itoa(offset + i - pos))
+							t.w.WriteString(" bytes>")
+							t.w.WriteByte(t.quoteChar)
+						}
 						t.quoteChar = 0
 						t.state = TEXT
 					}
 					t.backslashes = 0
 				}
 
-				t.w.WriteByte(c)
+				if keep {
+					t.w.WriteByte(c)
+				}
 
 			case QUOTED_STRING:
 				// non-printable ascii implies byte string
@@ -225,7 +243,8 @@ func (t *Task) Run() error {
 							if t.state == BINARY {
 								err := t.printAsHexString()
 								if err != nil {
-									fmt.Fprintf(os.Stderr, "Error at position %d+%d: %s\n", offset, i, err)
+									fmt.Fprintf(os.Stderr,
+										"Error at position %d: %s\n", offset + i, err)
 									os.Exit(1)
 								}
 							} else {
@@ -261,8 +280,12 @@ func (t *Task) Run() error {
 					// dump everything without conversion
 					t.printEatenChars()
 					t.w.WriteByte(t.quoteChar)
-					t.w.Write(t.buffer)
-					t.w.WriteByte(c) // not in the buffer yet
+					keep = false
+					if t.keep || t.state == QUOTED_STRING {
+						keep = true
+						t.w.Write(t.buffer)
+						t.w.WriteByte(c) // not in the buffer yet
+					}
 
 					// continue in raw mode until the end of string
 					t.state       = RAW
@@ -294,16 +317,18 @@ func (t *Task) Run() error {
 }
 
 func main() {
-	limit := flag.Int("l", 256, "skip byte strings longer than this limit")
+	limit := flag.Int("l", 256, "byte strings longer than this value will be replaced with placeholder text")
+	keep  := flag.Bool("k", false, "keep long byte strings unmodified")
+
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: hexify [-h] [-l <size>]\n")
+		fmt.Fprintf(os.Stderr, "Usage: hexify [-h] [-k] [-l <size>]\n")
 		fmt.Fprintf(os.Stderr, "Convert byte strings to hexadecimal literals\n\n")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 	flag.Parse()
 
-	task := NewTask(os.Stdin, os.Stdout, *limit)
+	task := NewTask(os.Stdin, os.Stdout, *limit, *keep)
 	if err := task.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error occurred: %w\n", err)
 		os.Exit(1)
