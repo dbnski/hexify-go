@@ -1,2 +1,3 @@
 SELECT * FROM configs WHERE config_key = 'max_connections';
 SELECT * FROM configs WHERE config_key = '';
+SELECT * FROM configs WHERE config_key = '漢字';
