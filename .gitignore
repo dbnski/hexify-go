@@ -15,6 +15,7 @@
 !test/*.in
 !test/*.check
 !test/*.args
+!test/*.code
 
 # ...even if they are in subdirectories
 !*/

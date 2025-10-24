@@ -1,0 +1,20 @@
+# at 416
+#251024 14:52:44 server id 160501  end_log_pos 998 CRC32 0x1da31c14 	Rows_query
+# INSERT INTO test (id) VALUES (_binary 'ð°×}U:½˜ðZÊ\
+# at 998
+#251024 14:52:44 server id 160501  end_log_pos 1185 CRC32 0xe68a594d 	Table_map: `test`.`test` mapped to number 100
+# has_generated_invisible_primary_key=0
+# at 1185
+#251024 14:52:44 server id 160501  end_log_pos 2043 CRC32 0x66379280 	Write_rows: table id 162 flags: STMT_END_F
+### INSERT INTO `test`.`test`
+### SET
+###   @1=29256510 /* LONGINT meta=0 nullable=0 is_null=0 */
+###   @2='\x1gð°×}U:½˜ð\x1fZÊ\x01\x00\x0f' /* STRING(16) meta=65040 nullable=1 is_null=0 */
+###   @3=NULL /* TINYINT meta=0 nullable=1 is_null=1 */
+###   @4=1761310364395 /* LONGINT meta=0 nullable=1 is_null=0 */
+###   @5='1798,1755,1751,1749,1720,1726,1687,1716,1566,1705,1501,1691,1334,1680,1110,1662,1026,1640,964,1550,851,1543,809,1459,775,1450,747,1344,693,1298,571,1231,558,1225,540,1012,342,858,263,807,174,754,150,686,114,622,94,377,80,355,67,254,56,190,26,176,4,169,0' /* VARSTRING(10000) meta=10000 nullable=1 is_null=0 */
+###   @6=-8                   /* FLOAT meta=4 nullable=1 is_null=0 */
+###   @78=NULL /* JSON meta=4 nullable=1 is_null=1 */
+# at 2043
+#251024 14:52:44 server id 160501  end_log_pos 2074 CRC32 0x353fb3b2 	Xid = 211859301
+COMMIT/*!*/;

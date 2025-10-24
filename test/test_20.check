@@ -1,0 +1,13 @@
+# at 416
+#251024 14:52:44 server id 160501  end_log_pos 998 CRC32 0x1da31c14 	Rows_query
+# INSERT INTO test (id) VALUES (_binary 'ð°×}U:½˜ðZÊ\
+# at 998
+#251024 14:52:44 server id 160501  end_log_pos 1185 CRC32 0xe68a594d 	Table_map: `test`.`test` mapped to number 100
+# has_generated_invisible_primary_key=0
+# at 1185
+#251024 14:52:44 server id 160501  end_log_pos 2043 CRC32 0x66379280 	Write_rows: table id 162 flags: STMT_END_F
+### INSERT INTO `test`.`test`
+### SET
+###   @1=29256510 /* LONGINT meta=0 nullable=0 is_null=0 */
+###   @2=0xError occurred: Error at position 573: bad sequence: \x1g
+

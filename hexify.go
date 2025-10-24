@@ -13,10 +13,11 @@ import (
 type State int
 
 const (
-	TEXT 		  State = iota
+	TEXT            State = iota
 	QUOTED_STRING
 	BINARY
 	RAW
+	ESCAPE_SEQUENCE
 )
 
 var keyword = []byte("binary")
@@ -24,6 +25,7 @@ var keyword = []byte("binary")
 type Task struct {
 	r             io.Reader
 	w             *bufio.Writer
+	binlog        bool
 	limit         int
 	keep          bool
 	state         State
@@ -38,10 +40,11 @@ type Task struct {
 	matched       int
 }
 
-func NewTask(r io.Reader, w io.Writer, limit int, keep bool) *Task {
+func NewTask(r io.Reader, w io.Writer, limit int, keep bool, binlog bool) *Task {
 	return &Task{
 		r:       r,
 		w:       bufio.NewWriter(w),
+		binlog:  binlog,
 		limit:   limit,
 		keep:    keep,
 		state:   TEXT,
@@ -66,26 +69,58 @@ func (t *Task) printAsHexString() error {
 			case '\'', '"', '\\':
 				c = t.buffer[i+1]
 				i++
-			case 0x00, '0':
+			case 0, '0':
 				c = 0x00
 				i++
 			case 'b':
-				c = 0x08
+				c = '\b'
 				i++
 			case 'n':
-				c = 0x0a
+				c = '\n'
 				i++
 			case 'r':
-				c = 0x0d
+				c = '\r'
 				i++
 			case 't':
-				c = 0x09
+				c = '\t'
 				i++
 			case 'Z':
 				c = 0x1a
 				i++
+			case 'x':
+				if t.binlog {
+					if i > len(t.buffer) - 4 {
+						return fmt.Errorf("bad sequence: \\x%s", string(t.buffer[i+2]))
+					}
+					c = 0
+					for j := 0; j < 2; j++ {
+						c = c << 4
+						b := t.buffer[i+2+j]
+						switch {
+						case b >= '0' && b <= '9':
+							b -= 0x30
+						case b >= 'A' && b <= 'F':
+							b -= 0x37
+						case b >= 'a' && b <= 'f':
+							b -= 0x57
+						default:
+							return fmt.Errorf("bad sequence: \\x%s%s", string(t.buffer[i+2]), string(t.buffer[i+3]))
+						}
+						c = c | b
+					}
+					i += 3
+					break
+				}
+				return fmt.Errorf("bad sequence: %02x %02x", c, t.buffer[i+1])
+			case 'f':
+				if t.binlog {
+					c = '\f'
+					i++
+					break
+				}
+				return fmt.Errorf("bad sequence: %02x %02x", c, t.buffer[i+1])
 			default:
-				return fmt.Errorf("bad sequence: %02x %02x\n", c, t.buffer[i+1])
+				return fmt.Errorf("bad sequence: %02x %02x", c, t.buffer[i+1])
 			}
 		}
 
@@ -110,8 +145,9 @@ func (t *Task) Run() error {
 	defer t.w.Flush()
 
 	var (
-		pos  int
-		keep bool
+		pos        int
+		keep       bool
+		poundSigns int
 	)
 
 	offset := 0
@@ -141,10 +177,17 @@ func (t *Task) Run() error {
 				// check if full-line comment
 				if t.newLine && c == '#' {
 					t.inComment = true
+					poundSigns = 0
 				}
 
 				// copy and move on quickly
 				if t.inComment {
+					if t.binlog && c == '#' {
+						poundSigns++
+						if poundSigns == 3 {
+							t.inComment = false
+						}
+					}
 					t.w.WriteByte(c)
 					break
 				}
@@ -173,6 +216,7 @@ func (t *Task) Run() error {
 				}
 
 				if (c | 0x20) == (keyword[t.matched] | 0x20) {
+					keyword[t.matched] = c
 					t.matched++
 					// keep eating chars until we can decide if this is a valid
 					// binary modifier or not
@@ -224,10 +268,24 @@ func (t *Task) Run() error {
 					t.w.WriteByte(c)
 				}
 
+			case ESCAPE_SEQUENCE:
+				switch c {
+				case 'x':
+					t.state = BINARY
+				default:
+					t.state = QUOTED_STRING
+				}
+				fallthrough
+
 			case QUOTED_STRING:
 				// non-printable ascii implies byte string
 				if c < 0x20 || c == 0x7f {
 					t.state = BINARY;
+				}
+				if t.binlog {
+					if c == '\\' {
+						t.state = ESCAPE_SEQUENCE
+					}
 				}
 				fallthrough
 
@@ -243,9 +301,7 @@ func (t *Task) Run() error {
 							if t.state == BINARY {
 								err := t.printAsHexString()
 								if err != nil {
-									fmt.Fprintf(os.Stderr,
-										"Error at position %d: %s\n", offset + i, err)
-									os.Exit(1)
+									return fmt.Errorf("Error at position %d: %s\n", offset + i, err)
 								}
 							} else {
 								t.w.WriteByte(t.quoteChar)
@@ -317,20 +373,21 @@ func (t *Task) Run() error {
 }
 
 func main() {
-	limit := flag.Int("l", 256, "byte strings longer than this value will be replaced with placeholder text")
-	keep  := flag.Bool("k", false, "keep long byte strings unmodified")
+	binlog := flag.Bool("b", false, "parse output from mysqlbinlog")
+	limit  := flag.Int("l", 256, "byte strings longer than this value will be replaced with placeholder text")
+	keep   := flag.Bool("k", false, "keep long byte strings unmodified")
 
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: hexify [-h] [-k] [-l <size>]\n")
+		fmt.Fprintf(os.Stderr, "Usage: hexify [-h] [-b] [-k] [-l <size>]\n")
 		fmt.Fprintf(os.Stderr, "Convert byte strings to hexadecimal literals\n\n")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 	flag.Parse()
 
-	task := NewTask(os.Stdin, os.Stdout, *limit, *keep)
+	task := NewTask(os.Stdin, os.Stdout, *limit, *keep, *binlog)
 	if err := task.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error occurred: %w\n", err)
+		fmt.Fprintf(os.Stderr, "Error occurred: %s\n", err)
 		os.Exit(1)
 	}
 }
