@@ -9,5 +9,5 @@
 ### INSERT INTO `test`.`test`
 ### SET
 ###   @1=29256510 /* LONGINT meta=0 nullable=0 is_null=0 */
-###   @2=0xError occurred: Error at position 573: bad sequence: \x1g
+###   @2=0xERROR: Parse error at position 573: bad sequence: \x1g
 

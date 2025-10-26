@@ -313,7 +313,7 @@ func (t *Task) Run() error {
 							if t.state == BINARY {
 								err := t.printAsHexString()
 								if err != nil {
-									return fmt.Errorf("Error at position %d: %s\n", offset + i, err)
+									return fmt.Errorf("Parse error at position %d: %s\n", offset + i, err)
 								}
 							} else {
 								t.w.WriteByte(t.quoteChar)
@@ -399,7 +399,7 @@ func main() {
 
 	task := NewTask(os.Stdin, os.Stdout, *limit, *keep, *binlog)
 	if err := task.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error occurred: %s\n", err)
+		fmt.Fprintf(os.Stderr, "ERROR: %s\n", err)
 		os.Exit(1)
 	}
 }
