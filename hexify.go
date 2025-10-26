@@ -96,17 +96,19 @@ func (t *Task) printAsHexString() error {
 					for j := 0; j < 2; j++ {
 						c = c << 4
 						b := t.buffer[i+2+j]
-						switch {
-						case b >= '0' && b <= '9':
+						if b >= '0' && b <= '9' {
 							b -= 0x30
-						case b >= 'A' && b <= 'F':
-							b -= 0x37
-						case b >= 'a' && b <= 'f':
-							b -= 0x57
-						default:
-							return fmt.Errorf("bad sequence: \\x%s%s", string(t.buffer[i+2]), string(t.buffer[i+3]))
+							c |= b
+							continue
 						}
-						c = c | b
+						b |= 0x20 // uppercase to lowercase
+						if b >= 'a' && b <= 'f' {
+							b -= 0x57
+							c |= b
+							continue
+						}
+						// not any of 0-9, A-F, a-f
+						return fmt.Errorf("bad sequence: \\x%s%s", string(t.buffer[i+2]), string(t.buffer[i+3]))
 					}
 					i += 3
 					break
@@ -145,9 +147,9 @@ func (t *Task) Run() error {
 	defer t.w.Flush()
 
 	var (
-		pos        int
-		keep       bool
-		poundSigns int
+		pos       int
+		keep      bool
+		hashCount int
 	)
 
 	offset := 0
@@ -177,15 +179,25 @@ func (t *Task) Run() error {
 				// check if full-line comment
 				if t.newLine && c == '#' {
 					t.inComment = true
-					poundSigns = 0
+					// search for pseudo queries in binlog dumps
+					if t.binlog {
+						hashCount = 1
+					}
+					t.w.WriteByte(c)
+					break
 				}
 
-				// copy and move on quickly
+				// copy and quickly move on
 				if t.inComment {
-					if t.binlog && c == '#' {
-						poundSigns++
-						if poundSigns == 3 {
-							t.inComment = false
+					if hashCount > 0 {
+						if c == '#' {
+							hashCount++
+						} else {
+							// it may be a pseudo query line
+							if hashCount == 3 {
+								t.inComment = false
+							}
+							hashCount = 0
 						}
 					}
 					t.w.WriteByte(c)
