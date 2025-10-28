@@ -88,41 +88,52 @@ func (t *Task) printAsHexString() error {
 				c = 0x1a
 				i++
 			case 'x':
+				// mysqlbinlog converts non-printable chars as \xHH
 				if t.binlog {
 					if i > len(t.buffer) - 4 {
-						return fmt.Errorf("bad sequence: \\x%s", string(t.buffer[i+2]))
+						return fmt.Errorf(
+							"bad sequence '%s': %x %x %x %x; expected \\x followed by hexadecimal byte value",
+							string(t.buffer[i:i+4]), t.buffer[i], t.buffer[i+1], t.buffer[i+2], t.buffer[i+3],
+						)
 					}
 					c = 0
-					for j := 0; j < 2; j++ {
+					// decode the byte code
+					for j := 2; j < 4; j++ {
 						c = c << 4
-						b := t.buffer[i+2+j]
+						b := t.buffer[i+j]
 						if b >= '0' && b <= '9' {
-							b -= 0x30
+							b -= '0'
 							c |= b
 							continue
 						}
 						b |= 0x20 // uppercase to lowercase
 						if b >= 'a' && b <= 'f' {
-							b -= 0x57
-							c |= b
+							b -= 'a'
+							c |= b + 10
 							continue
 						}
 						// not any of 0-9, A-F, a-f
-						return fmt.Errorf("bad sequence: \\x%s%s", string(t.buffer[i+2]), string(t.buffer[i+3]))
+						return fmt.Errorf(
+							"bad sequence '%s': %x %x %x %x; expected \\x followed by hexadecimal byte value",
+							string(t.buffer[i:i+4]), t.buffer[i], t.buffer[i+1], t.buffer[i+2], t.buffer[i+3],
+						)
 					}
 					i += 3
 					break
 				}
-				return fmt.Errorf("bad sequence: %02x %02x", c, t.buffer[i+1])
+				return fmt.Errorf("unexpected escape sequence '%s': %02x %02x",
+							string(t.buffer[i:i+2]), t.buffer[i], t.buffer[i+1])
 			case 'f':
 				if t.binlog {
 					c = '\f'
 					i++
 					break
 				}
-				return fmt.Errorf("bad sequence: %02x %02x", c, t.buffer[i+1])
+				return fmt.Errorf("unexpected escape sequence '%s': %02x %02x",
+							string(t.buffer[i:i+2]), t.buffer[i], t.buffer[i+1])
 			default:
-				return fmt.Errorf("bad sequence: %02x %02x", c, t.buffer[i+1])
+				return fmt.Errorf("unexpected escape sequence '%s': %02x %02x",
+							string(t.buffer[i:i+2]), t.buffer[i], t.buffer[i+1])
 			}
 		}
 
