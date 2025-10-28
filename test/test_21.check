@@ -1,0 +1,2 @@
+SELECT * FROM configs WHERE config_key = 0x616263ERROR: Parse error at position 56: unexpected escape sequence '\x': 5c 78
+

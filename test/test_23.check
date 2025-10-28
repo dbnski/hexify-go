@@ -1,0 +1,5 @@
+### INSERT INTO `test`.`test`
+### SET
+###   @1=29256510 /* LONGINT meta=0 nullable=0 is_null=0 */
+###   @2=0x11c3b0c2b0c3977d553ac2bdcb9cc3b01f5ac38a01ERROR: Parse error at position 145: bad sequence '\x0\': 5c 78 30 5c; expected \x followed by hexadecimal byte value
+

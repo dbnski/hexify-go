@@ -1,0 +1,1 @@
+SELECT * FROM configs WHERE config_key = binary 'abc\x0a';

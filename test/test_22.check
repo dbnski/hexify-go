@@ -1,0 +1,2 @@
+SELECT * FROM configs WHERE config_key = 0x616263ERROR: Parse error at position 54: unexpected escape sequence '\k': 5c 6b
+

@@ -17,4 +17,7 @@
 17: Tests extending the default byte string size limit
 18: Tests binary log dump using default parser
 19: Tests binary log dump using binlog parser
-20: Tests binary log dump format error
+20: Tests parse errors
+21: Tests parse errors
+22: Tests parse errors
+23: Tests parse errors
